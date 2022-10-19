@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+option go_package = "github.com/magnusblarsen/go_chat/proto";
+
+package proto;
+
+service Services{
+    rpc ChatService(stream ClientMessage) returns (stream ServerMessage);
+}
+
+message ClientMessage {
+    string senderID = 1;
+    string message = 2;
+}
+
+message ServerMessage {
+    string senderID = 1;
+    string message = 2;
+}
