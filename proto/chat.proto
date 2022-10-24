@@ -5,7 +5,7 @@ option go_package = "github.com/magnusblarsen/go_chat/proto";
 package proto;
 
 service Services{
-    rpc ChatService(stream ClientMessage) returns (stream ServerMessage);
+rpc ChatService(stream ClientMessage) returns (stream ServerMessage);
 }
 
 message ClientMessage {
