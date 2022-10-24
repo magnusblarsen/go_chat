@@ -82,7 +82,7 @@ func (clientHandle *clientHandle) bindStdinToServerStream(shutDown chan bool) {
         clientMessage = strings.Trim(clientMessage, "\r\n")
 
         message := &grpcChat.ClientMessage{
-            SenderID: "noget", //TODO: Sender ID
+            SenderID: *clientsName, //TODO: Sender ID
             Message: clientMessage,
         }
 

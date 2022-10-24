@@ -30,10 +30,15 @@ type Server struct {
 }
 
 
+type connectedClient struct {
+    name string
+    stream grpcChat.Services_ChatServiceServer
+}
+
 //TODO: perhaps better name
 //TODO: Should this be stored in server
 var messagesObject = messages{}
-var connectedClients = []string{}
+var connectedClientStreams = []connectedClient{}
 
 var serverName = flag.String("name", "default", "Senders name")
 var port = flag.String("port", "4500", "Server port")
@@ -49,23 +54,27 @@ func launchServer() {
 	if err != nil {
 		log.Printf("Server %s: Failed to listen on port %s: %v", *serverName, *port, err)
 	}
-	grpcServer := grpc.NewServer()
 
+	grpcServer := grpc.NewServer()
 	server := &Server{
 		name:             *serverName,
 		port:             *port,
 	}
-
 	grpcChat.RegisterServicesServer(grpcServer, server)
 	log.Printf("Server %s: Listening at %v\n", *serverName, list.Addr())
+
 	if err := grpcServer.Serve(list); err != nil {
 		log.Fatalf("failed to serve %v", err)
 	}
 }
 
 func (s *Server) ChatService(msgStream grpcChat.Services_ChatServiceServer) error {
-    errorChannel := make(chan error)
+    connectedClientStreams = append(connectedClientStreams, connectedClient{
+        stream: msgStream,
+        name: "noget", //TODO: fix så man kan fjerne stream
+    })    
 
+    errorChannel := make(chan error)
     go receiveStream(msgStream, errorChannel)
     go messagesListener(msgStream, errorChannel)
 
@@ -87,7 +96,8 @@ func receiveStream(msgStream grpcChat.Services_ChatServiceServer, errorChannel c
                 Message: fmt.Sprintf("GoodBye: %s", msg.SenderID),
                 SenderID: *serverName,
             }
-            msgStream.Send(ack) //TODO: SendAndClose() ???? way to close stream
+            msgStream.Send(ack) 
+            //TODO: fjern client fra connectedClientStreams
             errorChannel <- err
             return
         }
@@ -101,7 +111,6 @@ func receiveStream(msgStream grpcChat.Services_ChatServiceServer, errorChannel c
         messagesObject.mutex.Unlock()
         objectBodyReceived := messagesObject.messageQue[len(messagesObject.messageQue)-1]
         fmt.Printf("Message recieved as: %s\nfrom: %s\n", objectBodyReceived.MessageBody, objectBodyReceived.SenderID)
-        //TODO: notify all that message has been sent
     }
 }
 
@@ -118,19 +127,22 @@ func messagesListener(msgStream grpcChat.Services_ChatServiceServer, errorChanne
 
         //TODO: move below to a sendToClientStream()
         //TODO: for loop to loop through all stream of all clients
+
         senderID := messagesObject.messageQue[0].SenderID
         newMessage := messagesObject.messageQue[0].MessageBody
 
         messagesObject.mutex.Unlock()
-        
-        err := msgStream.Send(&grpcChat.ServerMessage{
-            SenderID: senderID,
-            Message: newMessage,
-        })
-        if err != nil {
-            errorChannel <- err
-        }
+        for _, v := range connectedClientStreams {
+            err := v.stream.Send(&grpcChat.ServerMessage{
+                SenderID: senderID,
+                Message: newMessage,
+            })
+            if err != nil {
+                errorChannel <- err
+            }
 
+        }
+        
         messagesObject.mutex.Lock()
 
         if len(messagesObject.messageQue) > 1 {
